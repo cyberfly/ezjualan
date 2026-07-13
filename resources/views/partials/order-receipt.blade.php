@@ -49,6 +49,18 @@
             </tr>
         </tbody>
         <tfoot>
+            @if ((float) $order->discount_amount > 0)
+                <tr>
+                    <td colspan="3" class="py-1 text-right">{{ __('Subjumlah') }}</td>
+                    <td class="py-1 text-right">RM{{ number_format((float) $order->subtotal, 2) }}</td>
+                </tr>
+                <tr>
+                    <td colspan="3" class="py-1 text-right text-green-600">
+                        {{ __('Diskaun') }}@if ($order->coupon_code) ({{ $order->coupon_code }})@endif
+                    </td>
+                    <td class="py-1 text-right text-green-600">-RM{{ number_format((float) $order->discount_amount, 2) }}</td>
+                </tr>
+            @endif
             <tr class="border-t border-zinc-200 dark:border-zinc-700">
                 <td colspan="3" class="py-2 text-right font-medium">{{ __('Jumlah Besar') }}</td>
                 <td class="py-2 text-right font-medium">RM{{ number_format((float) $order->total_price, 2) }}</td>

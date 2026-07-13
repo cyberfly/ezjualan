@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\PaymentMethod;
+use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\Product;
 use Livewire\Attributes\Layout;
@@ -24,11 +25,60 @@ new #[Layout('layouts::catalog')] #[Title('Tempah Produk')] class extends Compon
 
     public string $notes = '';
 
+    public string $couponCode = '';
+
+    public ?Coupon $appliedCoupon = null;
+
     public function mount(Product $product): void
     {
         abort_if(! $product->is_active || $product->isOutOfStock(), 404);
 
         $this->product = $product;
+    }
+
+    public function subtotal(): float
+    {
+        return (float) $this->product->price * $this->quantity;
+    }
+
+    public function discountAmount(): float
+    {
+        return $this->appliedCoupon?->calculateDiscount($this->subtotal()) ?? 0.0;
+    }
+
+    public function grandTotal(): float
+    {
+        return $this->subtotal() - $this->discountAmount();
+    }
+
+    public function applyCoupon(): void
+    {
+        $this->resetErrorBag('couponCode');
+        $code = trim($this->couponCode);
+
+        if ($code === '') {
+            $this->addError('couponCode', 'Sila masukkan kod kupon.');
+
+            return;
+        }
+
+        $coupon = Coupon::findByCode($code);
+
+        if (! $coupon || ! $coupon->isValidFor()) {
+            $this->appliedCoupon = null;
+            $this->addError('couponCode', 'Kod kupon tidak sah atau telah tamat tempoh.');
+
+            return;
+        }
+
+        $this->appliedCoupon = $coupon;
+    }
+
+    public function removeCoupon(): void
+    {
+        $this->appliedCoupon = null;
+        $this->couponCode = '';
+        $this->resetErrorBag('couponCode');
     }
 
     public function submit(): void
@@ -54,6 +104,7 @@ new #[Layout('layouts::catalog')] #[Title('Tempah Produk')] class extends Compon
             quantity: $validated['quantity'],
             paymentMethod: PaymentMethod::from($validated['paymentMethod']),
             notes: $validated['notes'] ?: null,
+            couponCode: $this->couponCode !== '' ? $this->couponCode : null,
         );
 
         $this->redirect(route('orders.confirmation', $order), navigate: true);
@@ -75,6 +126,42 @@ new #[Layout('layouts::catalog')] #[Title('Tempah Produk')] class extends Compon
 
     <form wire:submit="submit" class="space-y-6">
         <flux:input wire:model="quantity" type="number" min="1" max="{{ $product->stock }}" :label="__('Kuantiti')" />
+
+        <div class="space-y-2">
+            <div class="flex items-end gap-2">
+                <flux:input wire:model="couponCode" :label="__('Kod Kupon (pilihan)')" class="flex-1" />
+                <flux:button type="button" wire:click="applyCoupon">{{ __('Guna') }}</flux:button>
+            </div>
+
+            @if ($appliedCoupon)
+                <div class="flex items-center justify-between rounded-lg bg-green-50 px-3 py-2 dark:bg-green-900/20">
+                    <flux:text class="text-green-700 dark:text-green-400">
+                        {{ __(':code digunakan', ['code' => $appliedCoupon->code]) }}
+                    </flux:text>
+                    <flux:button size="sm" variant="ghost" type="button" wire:click="removeCoupon">
+                        {{ __('Buang') }}
+                    </flux:button>
+                </div>
+            @endif
+        </div>
+
+        <div class="space-y-1 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+            <div class="flex justify-between">
+                <flux:text>{{ __('Subjumlah') }}</flux:text>
+                <flux:text>RM{{ number_format($this->subtotal(), 2) }}</flux:text>
+            </div>
+            @if ($appliedCoupon)
+                <div class="flex justify-between">
+                    <flux:text class="text-green-600">{{ __('Diskaun') }}</flux:text>
+                    <flux:text class="text-green-600">-RM{{ number_format($this->discountAmount(), 2) }}</flux:text>
+                </div>
+            @endif
+            <flux:separator class="my-1" />
+            <div class="flex justify-between">
+                <flux:heading size="sm">{{ __('Jumlah Besar') }}</flux:heading>
+                <flux:heading size="sm">RM{{ number_format($this->grandTotal(), 2) }}</flux:heading>
+            </div>
+        </div>
 
         <flux:input wire:model="name" :label="__('Nama Penuh')" required />
         <flux:input wire:model="phone" :label="__('No. Telefon')" placeholder="012-3456789" required />

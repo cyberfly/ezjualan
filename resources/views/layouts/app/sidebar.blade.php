@@ -21,6 +21,9 @@
                     <flux:sidebar.item icon="shopping-bag" :href="route('products.index')" :current="request()->routeIs('products.*')" wire:navigate>
                         {{ __('Produk') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="ticket" :href="route('coupons.index')" :current="request()->routeIs('coupons.*')" wire:navigate>
+                        {{ __('Kupon') }}
+                    </flux:sidebar.item>
                     <flux:sidebar.item icon="clipboard-document-list" :href="route('orders.index')" :current="request()->routeIs('orders.*')" wire:navigate>
                         {{ __('Pesanan') }}
                     </flux:sidebar.item>

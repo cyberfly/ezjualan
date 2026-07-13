@@ -3,6 +3,7 @@
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Exceptions\InvalidOrderStatusTransition;
+use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -105,3 +106,21 @@ test('cancelling from shipped or completed is rejected', function (OrderStatus $
     [OrderStatus::Shipped],
     [OrderStatus::Completed],
 ]);
+
+test('cancelling an order releases the coupon usage count', function () {
+    $product = Product::factory()->create(['stock' => 10]);
+    $coupon = Coupon::factory()->percentage(10)->create();
+    $order = Order::placeOrder($product, ['name' => 'Ali', 'phone' => '0123456789'], 1, PaymentMethod::Cod, null, $coupon->code);
+
+    expect($coupon->refresh()->used_count)->toBe(1);
+
+    $order->transitionTo(OrderStatus::Cancelled);
+
+    expect($coupon->refresh()->used_count)->toBe(0);
+});
+
+test('cancelling an order without a coupon does not touch any coupon', function () {
+    $order = placeTestOrder();
+
+    expect(fn () => $order->transitionTo(OrderStatus::Cancelled))->not->toThrow(Exception::class);
+});

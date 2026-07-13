@@ -23,13 +23,17 @@ use Illuminate\Validation\ValidationException;
  * @property string $product_name
  * @property string $unit_price
  * @property int $quantity
+ * @property string|null $subtotal
+ * @property int|null $coupon_id
+ * @property string|null $coupon_code
+ * @property string $discount_amount
  * @property string $total_price
  * @property PaymentMethod $payment_method
  * @property OrderStatus $status
  * @property string|null $notes
  * @property Carbon $created_at
  */
-#[Fillable(['order_number', 'customer_id', 'product_id', 'product_name', 'unit_price', 'quantity', 'total_price', 'payment_method', 'status', 'notes'])]
+#[Fillable(['order_number', 'customer_id', 'product_id', 'product_name', 'unit_price', 'quantity', 'subtotal', 'coupon_id', 'coupon_code', 'discount_amount', 'total_price', 'payment_method', 'status', 'notes'])]
 class Order extends Model
 {
     /** @use HasFactory<OrderFactory> */
@@ -46,6 +50,8 @@ class Order extends Model
             'status' => OrderStatus::class,
             'payment_method' => PaymentMethod::class,
             'unit_price' => 'decimal:2',
+            'subtotal' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
             'total_price' => 'decimal:2',
             'quantity' => 'integer',
         ];
@@ -72,6 +78,14 @@ class Order extends Model
         return $this->belongsTo(Customer::class);
     }
 
+    /**
+     * @return BelongsTo<Coupon, $this>
+     */
+    public function coupon(): BelongsTo
+    {
+        return $this->belongsTo(Coupon::class);
+    }
+
     public static function generateOrderNumber(): string
     {
         do {
@@ -90,8 +104,9 @@ class Order extends Model
         int $quantity,
         PaymentMethod $paymentMethod,
         ?string $notes,
+        ?string $couponCode = null,
     ): self {
-        return DB::transaction(function () use ($product, $customerData, $quantity, $paymentMethod, $notes) {
+        return DB::transaction(function () use ($product, $customerData, $quantity, $paymentMethod, $notes, $couponCode) {
             /** @var Product $lockedProduct */
             $lockedProduct = Product::query()->whereKey($product->id)->lockForUpdate()->firstOrFail();
 
@@ -99,6 +114,22 @@ class Order extends Model
                 throw ValidationException::withMessages([
                     'quantity' => 'Stok produk tidak mencukupi untuk kuantiti yang diminta.',
                 ]);
+            }
+
+            $subtotal = (float) $lockedProduct->price * $quantity;
+            $discountAmount = 0.0;
+            $coupon = null;
+
+            if ($couponCode !== null && trim($couponCode) !== '') {
+                $coupon = Coupon::query()->where('code', Str::upper(trim($couponCode)))->lockForUpdate()->first();
+
+                if (! $coupon || ! $coupon->isValidFor()) {
+                    throw ValidationException::withMessages([
+                        'couponCode' => 'Kod kupon tidak sah atau telah tamat tempoh.',
+                    ]);
+                }
+
+                $discountAmount = $coupon->calculateDiscount($subtotal);
             }
 
             $customer = Customer::findOrCreateFromOrderForm($customerData);
@@ -110,13 +141,18 @@ class Order extends Model
                 'product_name' => $lockedProduct->name,
                 'unit_price' => $lockedProduct->price,
                 'quantity' => $quantity,
-                'total_price' => (float) $lockedProduct->price * $quantity,
+                'subtotal' => $subtotal,
+                'coupon_id' => $coupon?->id,
+                'coupon_code' => $coupon?->code,
+                'discount_amount' => $discountAmount,
+                'total_price' => $subtotal - $discountAmount,
                 'payment_method' => $paymentMethod,
                 'status' => OrderStatus::Pending,
                 'notes' => $notes,
             ]);
 
             $lockedProduct->decrement('stock', $quantity);
+            $coupon?->increment('used_count');
 
             return $order;
         });
@@ -131,6 +167,10 @@ class Order extends Model
         DB::transaction(function () use ($target) {
             if ($target === OrderStatus::Cancelled && in_array($this->status, [OrderStatus::Pending, OrderStatus::Confirmed], strict: true)) {
                 $this->product?->increment('stock', $this->quantity);
+
+                if ($this->coupon_id !== null) {
+                    $this->coupon?->decrement('used_count');
+                }
             }
 
             $this->update(['status' => $target]);

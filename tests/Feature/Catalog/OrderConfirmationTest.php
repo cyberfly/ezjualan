@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\PaymentMethod;
+use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\Product;
 
@@ -31,4 +32,27 @@ test('unknown order number returns 404', function () {
     $response = $this->get('/pesanan/ORD-NOTFOUND');
 
     $response->assertNotFound();
+});
+
+test('confirmation page shows subtotal and discount rows when a coupon was applied', function () {
+    $product = Product::factory()->create(['stock' => 10, 'price' => 100]);
+    $coupon = Coupon::factory()->percentage(10)->create();
+    $order = Order::placeOrder($product, ['name' => 'Ali', 'phone' => '0123456789'], 1, PaymentMethod::Cod, null, $coupon->code);
+
+    $response = $this->get(route('orders.confirmation', $order));
+
+    $response->assertOk();
+    $response->assertSee($coupon->code);
+    $response->assertSee('RM10.00');
+    $response->assertSee('RM90.00');
+});
+
+test('confirmation page omits discount rows when no coupon was applied', function () {
+    $product = Product::factory()->create(['stock' => 10]);
+    $order = Order::placeOrder($product, ['name' => 'Ali', 'phone' => '0123456789'], 1, PaymentMethod::Cod, null);
+
+    $response = $this->get(route('orders.confirmation', $order));
+
+    $response->assertOk();
+    $response->assertDontSee(__('Diskaun'));
 });
