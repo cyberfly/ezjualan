@@ -4,6 +4,9 @@
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
+/test-results
+/playwright-report
+/.playwright-mcp
 /storage/*.key
 /storage/pail
 /vendor
