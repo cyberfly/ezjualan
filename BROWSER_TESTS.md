@@ -38,3 +38,11 @@ npx playwright show-report          # open the HTML report from the last run
 - `coupon-purchase-order-confirmation.spec.ts` — guest buys a product using a
   coupon, admin confirms the order, then checks the dashboard shows the new
   order and the coupon's usage count increased by one.
+- `admin-search-customer-details.spec.ts` — admin searches the customer list
+  and opens a customer's order history. Read-only, no side effects.
+
+## Generating new specs
+
+Use the `playwright-mcp-test` skill (`.claude/skills/playwright-mcp-test/`) to
+turn a Playwright MCP browser session into a new spec here — it knows this
+project's Flux UI locator gotchas and where files should go.
